@@ -25,17 +25,6 @@ import (
 	"github.com/gorilla/sessions"
 )
 
-// CookieStore is an interface that represents a Cookie based storage
-// for Sessions.
-type CookieStore interface {
-	// Store is an embedded interface so that CookieStore can be used
-	// as a session store.
-	Store
-	// Options sets the default options for each session stored in this
-	// CookieStore.
-	Options(Options)
-}
-
 // NewCookieStore returns a new CookieStore.
 //
 // Keys are defined in pairs to allow key rotation, but the common case is to set a single
@@ -47,7 +36,7 @@ type CookieStore interface {
 //
 // It is recommended to use an authentication key with 32 or 64 bytes. The encryption key,
 // if set, must be either 16, 24, or 32 bytes to select AES-128, AES-192, or AES-256 modes.
-func NewCookieStore(keyPairs ...[]byte) CookieStore {
+func NewCookieStore(keyPairs ...[]byte) Store {
 	return &cookieStore{sessions.NewCookieStore(keyPairs...)}
 }
 

@@ -41,6 +41,7 @@ const (
 // Store is an interface for custom session stores.
 type Store interface {
 	sessions.Store
+	Options(Options)
 }
 
 // Options stores configuration for a session or session store.
@@ -79,7 +80,7 @@ type Session interface {
 	Options(Options)
 }
 
-// Sessions is a Middleware that maps a session.Session service into the Martini handler chain.
+// Sessions is a Middleware that maps a session.Session service into the negroni handler chain.
 // Sessions can use a number of storage solutions with the given store.
 func Sessions(name string, store Store) negroni.HandlerFunc {
 	return func(res http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
