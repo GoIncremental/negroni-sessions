@@ -1,7 +1,7 @@
 # negroni-sessions [![wercker status](https://app.wercker.com/status/988ab53fd546cb198ee5c4c530e0126b/s "wercker status")](https://app.wercker.com/project/bykey/988ab53fd546cb198ee5c4c530e0126b)
 Negroni middleware/handler for easy session management.
 
-[API Reference](http://godoc.org/github.com/goincremental/negroni-sessions)
+[API Reference](http://godoc.org/github.com/GoIncremental/negroni-sessions)
 
 ## Usage
 
@@ -11,7 +11,6 @@ package main
 import (
   "github.com/codegangsta/negroni"
   "github.com/goincremental/negroni-sessions"
-  "github.com/gorilla/context"
   "net/http"
 )
 

@@ -1,26 +1,26 @@
 // Package sessions contains middleware for easy session management in Negroni.
 // Based on github.com/martini-contrib/sessions
 //
-//  package main
+//	package main
 //
-//  import (
-//    "github.com/codegangsta/negroni"
-//    "github.com/goincremental/negroni-sessions"
-//    "net/http"
-//  )
+//	import (
+//		"github.com/codegangsta/negroni"
+//		"github.com/goincremental/negroni-sessions"
+//		"net/http"
+//	)
 //
-//  func main() {
-// 	 	n := negroni.Classic()
+//	func main() {
+//	n := negroni.Classic()
 //
-// 	  store := sessions.NewCookieStore([]byte("secret123"))
-// 	  n.Use(sessions.Sessions("my_session", store))
+//		store := sessions.NewCookieStore([]byte("secret123"))
+//		n.Use(sessions.Sessions("my_session", store))
 //
 //		mux := http.NewServeMux()
-// 	  mux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
-//      session := sessions.GetSession(req)
-// 		  session.Set("hello", "world")
-// 	  })
-//  }
+//		mux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
+//			session := sessions.GetSession(req)
+//			session.Set("hello", "world")
+//		})
+//	}
 package sessions
 
 import (
