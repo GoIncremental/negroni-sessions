@@ -9,19 +9,6 @@ import (
 	"time"
 )
 
-type mongoSession struct {
-	Id       bson.ObjectId `bson:"_id,omitempty"`
-	Data     string
-	Modified time.Time
-}
-
-type mongoStore struct {
-	Codecs  []securecookie.Codec
-	Token   tokenGetSeter
-	coll    mgo.Collection
-	options *sessions.Options
-}
-
 func NewMongoStore(c mgo.Collection, maxAge int, ensureTTL bool, keyPairs ...[]byte) Store {
 
 	if ensureTTL {
@@ -47,6 +34,19 @@ func (d *mongoStore) Options(options Options) {
 		Secure:   options.Secure,
 		HttpOnly: options.HttpOnly,
 	}
+}
+
+type mongoSession struct {
+	Id       bson.ObjectId `bson:"_id,omitempty"`
+	Data     string
+	Modified time.Time
+}
+
+type mongoStore struct {
+	Codecs  []securecookie.Codec
+	Token   tokenGetSeter
+	coll    mgo.Collection
+	options *sessions.Options
 }
 
 //Implementation of gorilla/sessions.Store interface
