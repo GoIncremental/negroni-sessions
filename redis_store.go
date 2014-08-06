@@ -23,6 +23,6 @@ func (c *rediStore) Options(options Options) {
 		Domain:   options.Domain,
 		MaxAge:   options.MaxAge,
 		Secure:   options.Secure,
-		HttpOnly: options.HttpOnly,
+		HttpOnly: options.HTTPOnly,
 	}
 }

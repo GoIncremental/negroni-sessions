@@ -1,17 +1,22 @@
 package sessions
 
 import (
+	"net/http"
+	"time"
+
 	"github.com/gorilla/securecookie"
 	"github.com/gorilla/sessions"
 	"labix.org/v2/mgo"
 	"labix.org/v2/mgo/bson"
-	"net/http"
-	"time"
 )
 
-func NewMongoStore(c mgo.Collection, maxAge int, ensureTTL bool, keyPairs ...[]byte) Store {
+func NewMongoStore(session mgo.Session, database string, collection string, maxAge int, ensureTTL bool, keyPairs ...[]byte) Store {
 
 	if ensureTTL {
+		conn := session.Clone()
+		defer conn.Close()
+		db := conn.DB(database)
+		c := db.C(collection)
 		c.EnsureIndex(mgo.Index{
 			Key:         []string{"modified"},
 			Background:  true,
@@ -20,9 +25,14 @@ func NewMongoStore(c mgo.Collection, maxAge int, ensureTTL bool, keyPairs ...[]b
 		})
 	}
 	return &mongoStore{
-		Codecs: securecookie.CodecsFromPairs(keyPairs...),
-		Token:  &cookieToken{},
-		coll:   c,
+		Codecs:     securecookie.CodecsFromPairs(keyPairs...),
+		Token:      &cookieToken{},
+		session:    session,
+		database:   database,
+		collection: collection,
+		options: &sessions.Options{
+			MaxAge: maxAge,
+		},
 	}
 }
 
@@ -32,7 +42,7 @@ func (d *mongoStore) Options(options Options) {
 		Domain:   options.Domain,
 		MaxAge:   options.MaxAge,
 		Secure:   options.Secure,
-		HttpOnly: options.HttpOnly,
+		HttpOnly: options.HTTPOnly,
 	}
 }
 
@@ -43,10 +53,12 @@ type mongoSession struct {
 }
 
 type mongoStore struct {
-	Codecs  []securecookie.Codec
-	Token   tokenGetSeter
-	coll    mgo.Collection
-	options *sessions.Options
+	Codecs     []securecookie.Codec
+	Token      tokenGetSeter
+	session    mgo.Session
+	database   string
+	collection string
+	options    *sessions.Options
 }
 
 //Implementation of gorilla/sessions.Store interface
@@ -68,12 +80,8 @@ func (m *mongoStore) New(r *http.Request, name string) (*sessions.Session, error
 	if cook, errToken := m.Token.getToken(r, name); errToken == nil {
 		err = securecookie.DecodeMulti(name, cook, &session.ID, m.Codecs...)
 		if err == nil {
-			err = m.load(session)
-			if err == nil {
-				session.IsNew = false
-			} else {
-				err = nil
-			}
+			ok, err := m.load(session)
+			session.IsNew = !(err == nil && ok) // not new if no error and data available
 		}
 	}
 	return session, err
@@ -92,7 +100,7 @@ func (m *mongoStore) Save(r *http.Request, w http.ResponseWriter, session *sessi
 		session.ID = bson.NewObjectId().Hex()
 	}
 
-	if err := m.upsert(session); err != nil {
+	if err := m.save(session); err != nil {
 		return err
 	}
 
@@ -106,26 +114,31 @@ func (m *mongoStore) Save(r *http.Request, w http.ResponseWriter, session *sessi
 	return nil
 }
 
-func (m *mongoStore) load(session *sessions.Session) error {
+func (m *mongoStore) load(session *sessions.Session) (bool, error) {
 	if !bson.IsObjectIdHex(session.ID) {
-		return ErrInvalidId
+		return false, ErrInvalidId
 	}
 
+	connection := m.session.Clone()
+	defer connection.Close()
+	db := connection.DB(m.database)
+	c := db.C(m.collection)
+
 	s := mongoSession{}
-	err := m.coll.FindId(bson.ObjectIdHex(session.ID)).One(&s)
+	err := c.FindId(bson.ObjectIdHex(session.ID)).One(&s)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	if err := securecookie.DecodeMulti(session.Name(), s.Data, &session.Values,
 		m.Codecs...); err != nil {
-		return err
+		return false, err
 	}
 
-	return nil
+	return true, nil
 }
 
-func (m *mongoStore) upsert(session *sessions.Session) error {
+func (m *mongoStore) save(session *sessions.Session) error {
 	if !bson.IsObjectIdHex(session.ID) {
 		return ErrInvalidId
 	}
@@ -147,12 +160,16 @@ func (m *mongoStore) upsert(session *sessions.Session) error {
 	}
 
 	s := mongoSession{
-		Id:       bson.ObjectIdHex(session.ID),
 		Data:     encoded,
 		Modified: modified,
 	}
 
-	_, err = m.coll.UpsertId(s.Id, &s)
+	connection := m.session.Clone()
+	defer connection.Close()
+	db := connection.DB(m.database)
+	c := db.C(m.collection)
+
+	_, err = c.UpsertId(bson.ObjectIdHex(session.ID), &s)
 	if err != nil {
 		return err
 	}
@@ -164,6 +181,9 @@ func (m *mongoStore) delete(session *sessions.Session) error {
 	if !bson.IsObjectIdHex(session.ID) {
 		return ErrInvalidId
 	}
-
-	return m.coll.RemoveId(bson.ObjectIdHex(session.ID))
+	connection := m.session.Clone()
+	defer connection.Close()
+	db := connection.DB(m.database)
+	c := db.C(m.collection)
+	return c.RemoveId(bson.ObjectIdHex(session.ID))
 }

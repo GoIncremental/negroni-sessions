@@ -1,16 +1,21 @@
 package sessions
 
 import (
+	"net/http"
+	"time"
+
 	"github.com/goincremental/dal"
 	"github.com/gorilla/securecookie"
 	"github.com/gorilla/sessions"
-	"net/http"
-	"time"
 )
 
-func NewDalStore(c dal.Collection, maxAge int, ensureTTL bool, keyPairs ...[]byte) Store {
-
+// NewDalStore is a factory function that returns a store object using the provided dal.Connection
+func NewDalStore(connection dal.Connection, database string, collection string, maxAge int, ensureTTL bool, keyPairs ...[]byte) Store {
 	if ensureTTL {
+		conn := connection.Clone()
+		defer conn.Close()
+		db := conn.DB(database)
+		c := db.C(collection)
 		c.EnsureIndex(dal.Index{
 			Key:         []string{"modified"},
 			Background:  true,
@@ -19,9 +24,14 @@ func NewDalStore(c dal.Collection, maxAge int, ensureTTL bool, keyPairs ...[]byt
 		})
 	}
 	return &dalStore{
-		Codecs: securecookie.CodecsFromPairs(keyPairs...),
-		Token:  &cookieToken{},
-		coll:   c,
+		Codecs:     securecookie.CodecsFromPairs(keyPairs...),
+		Token:      &cookieToken{},
+		connection: connection,
+		database:   database,
+		collection: collection,
+		options: &sessions.Options{
+			MaxAge: maxAge,
+		},
 	}
 }
 
@@ -31,103 +41,105 @@ func (d *dalStore) Options(options Options) {
 		Domain:   options.Domain,
 		MaxAge:   options.MaxAge,
 		Secure:   options.Secure,
-		HttpOnly: options.HttpOnly,
+		HttpOnly: options.HTTPOnly,
 	}
 }
 
 type dalSession struct {
-	Id       dal.ObjectId `bson:"_id,omitempty"`
+	ID       dal.ObjectID `bson:"_id,omitempty"`
 	Data     string
 	Modified time.Time
 }
 
 type dalStore struct {
-	Codecs  []securecookie.Codec
-	Token   tokenGetSeter
-	coll    dal.Collection
-	options *sessions.Options
+	Codecs     []securecookie.Codec
+	Token      tokenGetSeter
+	connection dal.Connection
+	database   string
+	collection string
+	options    *sessions.Options
 }
 
 //Implementation of gorilla/sessions.Store interface
 // Get registers and returns a session for the given name and session store.
 // It returns a new session if there are no sessions registered for the name.
-func (m *dalStore) Get(r *http.Request, name string) (*sessions.Session, error) {
-	return sessions.GetRegistry(r).Get(m, name)
+func (d *dalStore) Get(r *http.Request, name string) (*sessions.Session, error) {
+	return sessions.GetRegistry(r).Get(d, name)
 }
 
 // New returns a session for the given name without adding it to the registry.
-func (m *dalStore) New(r *http.Request, name string) (*sessions.Session, error) {
-	session := sessions.NewSession(m, name)
-	session.Options = &sessions.Options{
-		Path:   m.options.Path,
-		MaxAge: m.options.MaxAge,
-	}
-	session.IsNew = true
+func (d *dalStore) New(r *http.Request, name string) (*sessions.Session, error) {
 	var err error
-	if cook, errToken := m.Token.getToken(r, name); errToken == nil {
-		err = securecookie.DecodeMulti(name, cook, &session.ID, m.Codecs...)
+	session := sessions.NewSession(d, name)
+	options := *d.options
+	session.Options = &options
+	session.IsNew = true
+
+	if cook, errToken := d.Token.getToken(r, name); errToken == nil {
+		err = securecookie.DecodeMulti(name, cook, &session.ID, d.Codecs...)
 		if err == nil {
-			err = m.load(session)
-			if err == nil {
-				session.IsNew = false
-			} else {
-				err = nil
-			}
+			ok, err := d.load(session)
+			session.IsNew = !(err == nil && ok) // not new if no error and data available
 		}
 	}
 	return session, err
 }
 
-func (m *dalStore) Save(r *http.Request, w http.ResponseWriter, session *sessions.Session) error {
+func (d *dalStore) Save(r *http.Request, w http.ResponseWriter, session *sessions.Session) error {
 	if session.Options.MaxAge < 0 {
-		if err := m.delete(session); err != nil {
+		if err := d.delete(session); err != nil {
 			return err
 		}
-		m.Token.setToken(w, session.Name(), "", session.Options)
+		d.Token.setToken(w, session.Name(), "", session.Options)
 		return nil
 	}
-
 	if session.ID == "" {
 		session.ID = dal.NewObjectId().Hex()
 	}
 
-	if err := m.upsert(session); err != nil {
+	if err := d.save(session); err != nil {
 		return err
 	}
+	//save just the id to the cookie, the rest will be saved in the dal store
+	encoded, err := securecookie.EncodeMulti(session.Name(), session.ID, d.Codecs...)
 
-	encoded, err := securecookie.EncodeMulti(session.Name(), session.ID,
-		m.Codecs...)
 	if err != nil {
 		return err
 	}
 
-	m.Token.setToken(w, session.Name(), encoded, session.Options)
-	return nil
+	d.Token.setToken(w, session.Name(), encoded, session.Options)
+	return err
 }
 
-func (m *dalStore) load(session *sessions.Session) error {
+func (d *dalStore) load(session *sessions.Session) (bool, error) {
 	if !dal.IsObjectIdHex(session.ID) {
-		return ErrInvalidId
+		return false, ErrInvalidId
 	}
+	conn := d.connection.Clone()
+	defer conn.Close()
+	db := conn.DB(d.database)
+	c := db.C(d.collection)
 
 	s := dalSession{}
-	err := m.coll.FindId(dal.ObjectIdHex(session.ID)).One(&s)
+	err := c.FindID(dal.ObjectIdHex(session.ID)).One(&s)
 	if err != nil {
-		return err
+		return false, err
 	}
-
-	if err := securecookie.DecodeMulti(session.Name(), s.Data, &session.Values,
-		m.Codecs...); err != nil {
-		return err
+	if err := securecookie.DecodeMulti(session.Name(), s.Data, &session.Values, d.Codecs...); err != nil {
+		return false, err
 	}
-
-	return nil
+	return true, nil
 }
 
-func (m *dalStore) upsert(session *sessions.Session) error {
+func (d *dalStore) save(session *sessions.Session) error {
 	if !dal.IsObjectIdHex(session.ID) {
 		return ErrInvalidId
 	}
+
+	conn := d.connection.Clone()
+	defer conn.Close()
+	db := conn.DB(d.database)
+	c := db.C(d.collection)
 
 	var modified time.Time
 	if val, ok := session.Values["modified"]; ok {
@@ -139,19 +151,17 @@ func (m *dalStore) upsert(session *sessions.Session) error {
 		modified = time.Now()
 	}
 
-	encoded, err := securecookie.EncodeMulti(session.Name(), session.Values,
-		m.Codecs...)
+	encoded, err := securecookie.EncodeMulti(session.Name(), session.Values, d.Codecs...)
 	if err != nil {
 		return err
 	}
 
 	s := dalSession{
-		Id:       dal.ObjectIdHex(session.ID),
+		ID:       dal.ObjectIdHex(session.ID),
 		Data:     encoded,
 		Modified: modified,
 	}
-
-	_, err = m.coll.UpsertId(s.Id, &s)
+	_, err = c.UpsertID(dal.ObjectIdHex(session.ID), &s)
 	if err != nil {
 		return err
 	}
@@ -159,10 +169,15 @@ func (m *dalStore) upsert(session *sessions.Session) error {
 	return nil
 }
 
-func (m *dalStore) delete(session *sessions.Session) error {
+func (d *dalStore) delete(session *sessions.Session) error {
 	if !dal.IsObjectIdHex(session.ID) {
 		return ErrInvalidId
 	}
 
-	return m.coll.RemoveId(dal.ObjectIdHex(session.ID))
+	conn := d.connection.Clone()
+	defer conn.Close()
+	db := conn.DB(d.database)
+	c := db.C(d.collection)
+
+	return c.RemoveID(dal.ObjectIdHex(session.ID))
 }

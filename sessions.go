@@ -24,11 +24,12 @@
 package sessions
 
 import (
+	"log"
+	"net/http"
+
 	"github.com/codegangsta/negroni"
 	"github.com/gorilla/context"
 	"github.com/gorilla/sessions"
-	"log"
-	"net/http"
 )
 
 type contextKey int
@@ -55,7 +56,7 @@ type Options struct {
 	// MaxAge>0 means Max-Age attribute present and given in seconds.
 	MaxAge   int
 	Secure   bool
-	HttpOnly bool
+	HTTPOnly bool
 }
 
 // Session stores the values and optional configuration for a session.
@@ -111,6 +112,7 @@ type session struct {
 	written bool
 }
 
+// GetSession returns the session stored in the request context
 func GetSession(req *http.Request) Session {
 	return context.Get(req, sessionKey).(*session)
 }
@@ -151,7 +153,7 @@ func (s *session) Options(options Options) {
 		Domain:   options.Domain,
 		MaxAge:   options.MaxAge,
 		Secure:   options.Secure,
-		HttpOnly: options.HttpOnly,
+		HttpOnly: options.HTTPOnly,
 	}
 }
 

@@ -50,6 +50,6 @@ func (c *cookieStore) Options(options Options) {
 		Domain:   options.Domain,
 		MaxAge:   options.MaxAge,
 		Secure:   options.Secure,
-		HttpOnly: options.HttpOnly,
+		HttpOnly: options.HTTPOnly,
 	}
 }
