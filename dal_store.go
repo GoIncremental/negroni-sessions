@@ -94,7 +94,7 @@ func (d *dalStore) Save(r *http.Request, w http.ResponseWriter, session *session
 		return nil
 	}
 	if session.ID == "" {
-		session.ID = dal.NewObjectId().Hex()
+		session.ID = dal.NewObjectID().Hex()
 	}
 
 	if err := d.save(session); err != nil {
@@ -112,7 +112,7 @@ func (d *dalStore) Save(r *http.Request, w http.ResponseWriter, session *session
 }
 
 func (d *dalStore) load(session *sessions.Session) (bool, error) {
-	if !dal.IsObjectIdHex(session.ID) {
+	if !dal.IsObjectIDHex(session.ID) {
 		return false, ErrInvalidId
 	}
 	conn := d.connection.Clone()
@@ -121,7 +121,7 @@ func (d *dalStore) load(session *sessions.Session) (bool, error) {
 	c := db.C(d.collection)
 
 	s := dalSession{}
-	err := c.FindID(dal.ObjectIdHex(session.ID)).One(&s)
+	err := c.FindID(dal.ObjectIDHex(session.ID)).One(&s)
 	if err != nil {
 		return false, err
 	}
@@ -132,7 +132,7 @@ func (d *dalStore) load(session *sessions.Session) (bool, error) {
 }
 
 func (d *dalStore) save(session *sessions.Session) error {
-	if !dal.IsObjectIdHex(session.ID) {
+	if !dal.IsObjectIDHex(session.ID) {
 		return ErrInvalidId
 	}
 
@@ -157,11 +157,11 @@ func (d *dalStore) save(session *sessions.Session) error {
 	}
 
 	s := dalSession{
-		ID:       dal.ObjectIdHex(session.ID),
+		ID:       dal.ObjectIDHex(session.ID),
 		Data:     encoded,
 		Modified: modified,
 	}
-	_, err = c.UpsertID(dal.ObjectIdHex(session.ID), &s)
+	_, err = c.UpsertID(dal.ObjectIDHex(session.ID), &s)
 	if err != nil {
 		return err
 	}
@@ -170,7 +170,7 @@ func (d *dalStore) save(session *sessions.Session) error {
 }
 
 func (d *dalStore) delete(session *sessions.Session) error {
-	if !dal.IsObjectIdHex(session.ID) {
+	if !dal.IsObjectIDHex(session.ID) {
 		return ErrInvalidId
 	}
 
@@ -179,5 +179,5 @@ func (d *dalStore) delete(session *sessions.Session) error {
 	db := conn.DB(d.database)
 	c := db.C(d.collection)
 
-	return c.RemoveID(dal.ObjectIdHex(session.ID))
+	return c.RemoveID(dal.ObjectIDHex(session.ID))
 }
