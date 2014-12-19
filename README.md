@@ -9,13 +9,14 @@ package main
 import (
   "github.com/codegangsta/negroni"
   "github.com/goincremental/negroni-sessions"
+  "github.com/goincremental/negroni-sessions/cookiestore"
   "net/http"
 )
 
 func main() {
   n := negroni.Classic()
 
-  store := sessions.NewCookieStore([]byte("secret123"))  
+  store := cookiestore.New([]byte("secret123"))  
   n.Use(sessions.Sessions("my_session", store))
 
   mux := http.NewServeMux()
@@ -30,6 +31,7 @@ func main() {
 
 ~~~
 
-## Authors
+## Contributors
 * [David Bochenski](http://github.com/goincremental)
 * [Jeremy Saenz](http://github.com/codegangsta)
+* [Deniz Eren](https://github.com/denizeren)
