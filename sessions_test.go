@@ -2,18 +2,20 @@ package sessions_test
 
 import (
 	"fmt"
-	"github.com/codegangsta/negroni"
-	"github.com/goincremental/negroni-sessions"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/codegangsta/negroni"
+	"github.com/goincremental/negroni-sessions"
+	"github.com/goincremental/negroni-sessions/cookiestore"
 )
 
 func Test_Sessions(t *testing.T) {
 	n := negroni.Classic()
 
-	store := sessions.NewCookieStore([]byte("secret123"))
+	store := cookiestore.New([]byte("secret123"))
 	n.Use(sessions.Sessions("my_session", store))
 
 	mux := http.NewServeMux()
@@ -45,7 +47,7 @@ func Test_Sessions(t *testing.T) {
 func Test_SessionsDeleteValue(t *testing.T) {
 	n := negroni.Classic()
 
-	store := sessions.NewCookieStore([]byte("secret123"))
+	store := cookiestore.New([]byte("secret123"))
 	n.Use(sessions.Sessions("my_session", store))
 
 	mux := http.NewServeMux()
@@ -79,7 +81,7 @@ func Test_SessionsDeleteValue(t *testing.T) {
 
 func Test_Options(t *testing.T) {
 	n := negroni.Classic()
-	store := sessions.NewCookieStore([]byte("secret123"))
+	store := cookiestore.New([]byte("secret123"))
 	store.Options(sessions.Options{
 		Domain: "negroni-sessions.goincremental.com",
 	})
@@ -127,7 +129,7 @@ func Test_Options(t *testing.T) {
 func Test_Flashes(t *testing.T) {
 	n := negroni.Classic()
 
-	store := sessions.NewCookieStore([]byte("secret123"))
+	store := cookiestore.New([]byte("secret123"))
 	n.Use(sessions.Sessions("my_session", store))
 
 	mux := http.NewServeMux()
@@ -181,7 +183,7 @@ func Test_SessionsClear(t *testing.T) {
 		"apples": "oranges",
 	}
 
-	store := sessions.NewCookieStore([]byte("secret123"))
+	store := cookiestore.New([]byte("secret123"))
 	n.Use(sessions.Sessions("my_session", store))
 
 	mux := http.NewServeMux()
