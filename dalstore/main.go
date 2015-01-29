@@ -1,16 +1,18 @@
-package sessions
+package dalstore
 
 import (
 	"net/http"
 	"time"
 
 	"github.com/goincremental/dal"
+	nSessions "github.com/goincremental/negroni-sessions"
 	"github.com/gorilla/securecookie"
-	"github.com/gorilla/sessions"
+	gSessions "github.com/gorilla/sessions"
 )
 
-// NewDalStore is a factory function that returns a store object using the provided dal.Connection
-func NewDalStore(connection dal.Connection, database string, collection string, maxAge int, ensureTTL bool, keyPairs ...[]byte) Store {
+// New is returns a store object using the provided dal.Connection
+func New(connection dal.Connection, database string, collection string, maxAge int,
+	ensureTTL bool, keyPairs ...[]byte) nSessions.Store {
 	if ensureTTL {
 		conn := connection.Clone()
 		defer conn.Close()
@@ -25,18 +27,18 @@ func NewDalStore(connection dal.Connection, database string, collection string, 
 	}
 	return &dalStore{
 		Codecs:     securecookie.CodecsFromPairs(keyPairs...),
-		Token:      &cookieToken{},
+		Token:      nSessions.NewCookieToken(),
 		connection: connection,
 		database:   database,
 		collection: collection,
-		options: &sessions.Options{
+		options: &gSessions.Options{
 			MaxAge: maxAge,
 		},
 	}
 }
 
-func (d *dalStore) Options(options Options) {
-	d.options = &sessions.Options{
+func (d *dalStore) Options(options nSessions.Options) {
+	d.options = &gSessions.Options{
 		Path:     options.Path,
 		Domain:   options.Domain,
 		MaxAge:   options.MaxAge,
@@ -53,29 +55,29 @@ type dalSession struct {
 
 type dalStore struct {
 	Codecs     []securecookie.Codec
-	Token      tokenGetSeter
+	Token      nSessions.TokenGetSetter
 	connection dal.Connection
 	database   string
 	collection string
-	options    *sessions.Options
+	options    *gSessions.Options
 }
 
 //Implementation of gorilla/sessions.Store interface
 // Get registers and returns a session for the given name and session store.
 // It returns a new session if there are no sessions registered for the name.
-func (d *dalStore) Get(r *http.Request, name string) (*sessions.Session, error) {
-	return sessions.GetRegistry(r).Get(d, name)
+func (d *dalStore) Get(r *http.Request, name string) (*gSessions.Session, error) {
+	return gSessions.GetRegistry(r).Get(d, name)
 }
 
 // New returns a session for the given name without adding it to the registry.
-func (d *dalStore) New(r *http.Request, name string) (*sessions.Session, error) {
+func (d *dalStore) New(r *http.Request, name string) (*gSessions.Session, error) {
 	var err error
-	session := sessions.NewSession(d, name)
+	session := gSessions.NewSession(d, name)
 	options := *d.options
 	session.Options = &options
 	session.IsNew = true
 
-	if cook, errToken := d.Token.getToken(r, name); errToken == nil {
+	if cook, errToken := d.Token.GetToken(r, name); errToken == nil {
 		err = securecookie.DecodeMulti(name, cook, &session.ID, d.Codecs...)
 		if err == nil {
 			ok, err := d.load(session)
@@ -85,12 +87,12 @@ func (d *dalStore) New(r *http.Request, name string) (*sessions.Session, error) 
 	return session, err
 }
 
-func (d *dalStore) Save(r *http.Request, w http.ResponseWriter, session *sessions.Session) error {
+func (d *dalStore) Save(r *http.Request, w http.ResponseWriter, session *gSessions.Session) error {
 	if session.Options.MaxAge < 0 {
 		if err := d.delete(session); err != nil {
 			return err
 		}
-		d.Token.setToken(w, session.Name(), "", session.Options)
+		d.Token.SetToken(w, session.Name(), "", session.Options)
 		return nil
 	}
 	if session.ID == "" {
@@ -107,13 +109,13 @@ func (d *dalStore) Save(r *http.Request, w http.ResponseWriter, session *session
 		return err
 	}
 
-	d.Token.setToken(w, session.Name(), encoded, session.Options)
+	d.Token.SetToken(w, session.Name(), encoded, session.Options)
 	return err
 }
 
-func (d *dalStore) load(session *sessions.Session) (bool, error) {
+func (d *dalStore) load(session *gSessions.Session) (bool, error) {
 	if !dal.IsObjectIDHex(session.ID) {
-		return false, ErrInvalidId
+		return false, nSessions.ErrInvalidId
 	}
 	conn := d.connection.Clone()
 	defer conn.Close()
@@ -131,9 +133,9 @@ func (d *dalStore) load(session *sessions.Session) (bool, error) {
 	return true, nil
 }
 
-func (d *dalStore) save(session *sessions.Session) error {
+func (d *dalStore) save(session *gSessions.Session) error {
 	if !dal.IsObjectIDHex(session.ID) {
-		return ErrInvalidId
+		return nSessions.ErrInvalidId
 	}
 
 	conn := d.connection.Clone()
@@ -145,7 +147,7 @@ func (d *dalStore) save(session *sessions.Session) error {
 	if val, ok := session.Values["modified"]; ok {
 		modified, ok = val.(time.Time)
 		if !ok {
-			return ErrInvalidModified
+			return nSessions.ErrInvalidModified
 		}
 	} else {
 		modified = time.Now()
@@ -169,9 +171,9 @@ func (d *dalStore) save(session *sessions.Session) error {
 	return nil
 }
 
-func (d *dalStore) delete(session *sessions.Session) error {
+func (d *dalStore) delete(session *gSessions.Session) error {
 	if !dal.IsObjectIDHex(session.ID) {
-		return ErrInvalidId
+		return nSessions.ErrInvalidId
 	}
 
 	conn := d.connection.Clone()

@@ -1,16 +1,18 @@
-package sessions
+package mongostore
 
 import (
 	"net/http"
 	"time"
 
+	nSessions "github.com/goincremental/negroni-sessions"
 	"github.com/gorilla/securecookie"
-	"github.com/gorilla/sessions"
+	gSessions "github.com/gorilla/sessions"
 	"labix.org/v2/mgo"
 	"labix.org/v2/mgo/bson"
 )
 
-func NewMongoStore(session mgo.Session, database string, collection string, maxAge int, ensureTTL bool, keyPairs ...[]byte) Store {
+// New returns a new mongo store
+func New(session mgo.Session, database string, collection string, maxAge int, ensureTTL bool, keyPairs ...[]byte) nSessions.Store {
 
 	if ensureTTL {
 		conn := session.Clone()
@@ -26,18 +28,18 @@ func NewMongoStore(session mgo.Session, database string, collection string, maxA
 	}
 	return &mongoStore{
 		Codecs:     securecookie.CodecsFromPairs(keyPairs...),
-		Token:      &cookieToken{},
+		Token:      nSessions.NewCookieToken(),
 		session:    session,
 		database:   database,
 		collection: collection,
-		options: &sessions.Options{
+		options: &gSessions.Options{
 			MaxAge: maxAge,
 		},
 	}
 }
 
-func (d *mongoStore) Options(options Options) {
-	d.options = &sessions.Options{
+func (m *mongoStore) Options(options nSessions.Options) {
+	m.options = &gSessions.Options{
 		Path:     options.Path,
 		Domain:   options.Domain,
 		MaxAge:   options.MaxAge,
@@ -47,37 +49,37 @@ func (d *mongoStore) Options(options Options) {
 }
 
 type mongoSession struct {
-	Id       bson.ObjectId `bson:"_id,omitempty"`
+	ID       bson.ObjectId `bson:"_id,omitempty"`
 	Data     string
 	Modified time.Time
 }
 
 type mongoStore struct {
 	Codecs     []securecookie.Codec
-	Token      tokenGetSeter
+	Token      nSessions.TokenGetSetter
 	session    mgo.Session
 	database   string
 	collection string
-	options    *sessions.Options
+	options    *gSessions.Options
 }
 
 //Implementation of gorilla/sessions.Store interface
 // Get registers and returns a session for the given name and session store.
 // It returns a new session if there are no sessions registered for the name.
-func (m *mongoStore) Get(r *http.Request, name string) (*sessions.Session, error) {
-	return sessions.GetRegistry(r).Get(m, name)
+func (m *mongoStore) Get(r *http.Request, name string) (*gSessions.Session, error) {
+	return gSessions.GetRegistry(r).Get(m, name)
 }
 
 // New returns a session for the given name without adding it to the registry.
-func (m *mongoStore) New(r *http.Request, name string) (*sessions.Session, error) {
-	session := sessions.NewSession(m, name)
-	session.Options = &sessions.Options{
+func (m *mongoStore) New(r *http.Request, name string) (*gSessions.Session, error) {
+	session := gSessions.NewSession(m, name)
+	session.Options = &gSessions.Options{
 		Path:   m.options.Path,
 		MaxAge: m.options.MaxAge,
 	}
 	session.IsNew = true
 	var err error
-	if cook, errToken := m.Token.getToken(r, name); errToken == nil {
+	if cook, errToken := m.Token.GetToken(r, name); errToken == nil {
 		err = securecookie.DecodeMulti(name, cook, &session.ID, m.Codecs...)
 		if err == nil {
 			ok, err := m.load(session)
@@ -87,12 +89,12 @@ func (m *mongoStore) New(r *http.Request, name string) (*sessions.Session, error
 	return session, err
 }
 
-func (m *mongoStore) Save(r *http.Request, w http.ResponseWriter, session *sessions.Session) error {
+func (m *mongoStore) Save(r *http.Request, w http.ResponseWriter, session *gSessions.Session) error {
 	if session.Options.MaxAge < 0 {
 		if err := m.delete(session); err != nil {
 			return err
 		}
-		m.Token.setToken(w, session.Name(), "", session.Options)
+		m.Token.SetToken(w, session.Name(), "", session.Options)
 		return nil
 	}
 
@@ -110,13 +112,13 @@ func (m *mongoStore) Save(r *http.Request, w http.ResponseWriter, session *sessi
 		return err
 	}
 
-	m.Token.setToken(w, session.Name(), encoded, session.Options)
+	m.Token.SetToken(w, session.Name(), encoded, session.Options)
 	return nil
 }
 
-func (m *mongoStore) load(session *sessions.Session) (bool, error) {
+func (m *mongoStore) load(session *gSessions.Session) (bool, error) {
 	if !bson.IsObjectIdHex(session.ID) {
-		return false, ErrInvalidId
+		return false, nSessions.ErrInvalidId
 	}
 
 	connection := m.session.Clone()
@@ -138,16 +140,16 @@ func (m *mongoStore) load(session *sessions.Session) (bool, error) {
 	return true, nil
 }
 
-func (m *mongoStore) save(session *sessions.Session) error {
+func (m *mongoStore) save(session *gSessions.Session) error {
 	if !bson.IsObjectIdHex(session.ID) {
-		return ErrInvalidId
+		return nSessions.ErrInvalidId
 	}
 
 	var modified time.Time
 	if val, ok := session.Values["modified"]; ok {
 		modified, ok = val.(time.Time)
 		if !ok {
-			return ErrInvalidModified
+			return nSessions.ErrInvalidModified
 		}
 	} else {
 		modified = time.Now()
@@ -177,9 +179,9 @@ func (m *mongoStore) save(session *sessions.Session) error {
 	return nil
 }
 
-func (m *mongoStore) delete(session *sessions.Session) error {
+func (m *mongoStore) delete(session *gSessions.Session) error {
 	if !bson.IsObjectIdHex(session.ID) {
-		return ErrInvalidId
+		return nSessions.ErrInvalidId
 	}
 	connection := m.session.Clone()
 	defer connection.Close()

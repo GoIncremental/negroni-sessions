@@ -1,11 +1,13 @@
-package sessions
+package redisstore
 
 import (
 	"github.com/boj/redistore"
-	"github.com/gorilla/sessions"
+	nSessions "github.com/goincremental/negroni-sessions"
+	gSessions "github.com/gorilla/sessions"
 )
 
-func NewRediStore(size int, network, address, password string, keyPairs ...[]byte) (Store, error) {
+//New returns a new Redis store
+func New(size int, network, address, password string, keyPairs ...[]byte) (nSessions.Store, error) {
 	store, err := redistore.NewRediStore(size, network, address, password, keyPairs...)
 	if err != nil {
 		return nil, err
@@ -17,8 +19,8 @@ type rediStore struct {
 	*redistore.RediStore
 }
 
-func (c *rediStore) Options(options Options) {
-	c.RediStore.Options = &sessions.Options{
+func (c *rediStore) Options(options nSessions.Options) {
+	c.RediStore.Options = &gSessions.Options{
 		Path:     options.Path,
 		Domain:   options.Domain,
 		MaxAge:   options.MaxAge,
