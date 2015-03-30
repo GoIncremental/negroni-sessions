@@ -158,12 +158,14 @@ func (d *dalStore) save(session *gSessions.Session) error {
 		return err
 	}
 
+	id := dal.ObjectIDHex(session.ID)
 	s := dalSession{
-		ID:       dal.ObjectIDHex(session.ID),
+		ID:       id,
 		Data:     encoded,
 		Modified: modified,
 	}
-	_, err = c.UpsertID(dal.ObjectIDHex(session.ID), &s)
+
+	_, err = c.SaveID(id, &s)
 	if err != nil {
 		return err
 	}
