@@ -7,8 +7,8 @@ import (
 	nSessions "github.com/goincremental/negroni-sessions"
 	"github.com/gorilla/securecookie"
 	gSessions "github.com/gorilla/sessions"
-	"labix.org/v2/mgo"
-	"labix.org/v2/mgo/bson"
+	"gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2/bson"
 )
 
 // New returns a new mongo store
