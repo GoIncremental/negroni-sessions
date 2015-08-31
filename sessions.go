@@ -114,7 +114,10 @@ type session struct {
 
 // GetSession returns the session stored in the request context
 func GetSession(req *http.Request) Session {
-	return context.Get(req, sessionKey).(*session)
+	if s, ok := context.Get(req, sessionKey).(*session); ok {
+		return s
+	}
+	return nil
 }
 
 func (s *session) Get(key interface{}) interface{} {
