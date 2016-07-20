@@ -7,7 +7,7 @@ Negroni middleware/handler for easy session management.
 package main
 
 import (
-  "github.com/codegangsta/negroni"
+  "github.com/urfave/negroni"
   "github.com/goincremental/negroni-sessions"
   "github.com/goincremental/negroni-sessions/cookiestore"
   "net/http"
