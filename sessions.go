@@ -27,7 +27,8 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/gorilla/context"
+	"context"
+
 	"github.com/gorilla/sessions"
 	"github.com/urfave/negroni"
 )
@@ -87,7 +88,8 @@ func Sessions(name string, store Store) negroni.HandlerFunc {
 	return func(res http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 		// Map to the Session interface
 		s := &session{name, r, store, nil, false}
-		context.Set(r, sessionKey, s)
+		r = r.WithContext(context.WithValue(r.Context(), sessionKey, s))
+		// context.Set(r, sessionKey, s)
 		// Use before hook to save out the session
 		rw := res.(negroni.ResponseWriter)
 		rw.Before(func(negroni.ResponseWriter) {
@@ -98,7 +100,7 @@ func Sessions(name string, store Store) negroni.HandlerFunc {
 
 		// clear the context, we don't need to use
 		// gorilla context and we don't want memory leaks
-		defer context.Clear(r)
+		// defer context.Clear(r)
 
 		next(rw, r)
 	}
@@ -114,7 +116,7 @@ type session struct {
 
 // GetSession returns the session stored in the request context
 func GetSession(req *http.Request) Session {
-	if s, ok := context.Get(req, sessionKey).(*session); ok {
+	if s, ok := req.Context().Value(sessionKey).(*session); ok {
 		return s
 	}
 	return nil
