@@ -93,7 +93,7 @@ func Sessions(name string, store Store) negroni.HandlerFunc {
 		ctx := context.WithValue(r.Context(), sessionKey, s)
 
 		// Use before hook to save out the session
-		rw := res.(negroni.ResponseWriter)
+		rw := negroni.NewResponseWriter(res)
 		rw.Before(func(negroni.ResponseWriter) {
 			if s.Written() {
 				check(s.Session().Save(r, res))
