@@ -28,6 +28,7 @@ import (
 	"log"
 	"net/http"
 
+	gContext "github.com/gorilla/context"
 	"github.com/gorilla/sessions"
 	"github.com/urfave/negroni"
 )
@@ -123,37 +124,65 @@ func GetSession(req *http.Request) Session {
 }
 
 func (s *session) Get(key interface{}) interface{} {
-	return s.Session().Values[key]
+	sess := s.Session()
+	if sess == nil {
+		return nil
+	}
+	return sess.Values[key]
 }
 
 func (s *session) Set(key interface{}, val interface{}) {
-	s.Session().Values[key] = val
+	sess := s.Session()
+	if sess == nil {
+		return
+	}
+	sess.Values[key] = val
 	s.written = true
 }
 
 func (s *session) Delete(key interface{}) {
-	delete(s.Session().Values, key)
+	sess := s.Session()
+	if sess == nil {
+		return
+	}
+	delete(sess.Values, key)
 	s.written = true
 }
 
 func (s *session) Clear() {
-	for key := range s.Session().Values {
-		s.Delete(key)
+	sess := s.Session()
+	if sess == nil {
+		return
 	}
+	sess.Values = nil
+	s.written = true
+	gContext.Clear(s.request)
 }
 
 func (s *session) AddFlash(value interface{}, vars ...string) {
-	s.Session().AddFlash(value, vars...)
+	sess := s.Session()
+	if sess == nil {
+		return
+	}
+	sess.AddFlash(value, vars...)
 	s.written = true
 }
 
 func (s *session) Flashes(vars ...string) []interface{} {
+	sess := s.Session()
+	if sess == nil {
+		return []interface{}{}
+	}
 	s.written = true
-	return s.Session().Flashes(vars...)
+	return sess.Flashes(vars...)
 }
 
 func (s *session) Options(options Options) {
-	s.Session().Options = &sessions.Options{
+	sess := s.Session()
+	if sess == nil {
+		return
+	}
+	sess.Options = &sessions.Options{
 		Path:     options.Path,
 		Domain:   options.Domain,
 		MaxAge:   options.MaxAge,
