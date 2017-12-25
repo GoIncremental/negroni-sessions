@@ -102,7 +102,7 @@ func Sessions(name string, store Store) negroni.HandlerFunc {
 
 		// Wrap our request with the new context
 		r = r.WithContext(ctx)
-
+		defer gContext.Clear(r)
 		next(rw, r)
 	}
 }
@@ -156,7 +156,6 @@ func (s *session) Clear() {
 	}
 	sess.Values = nil
 	s.written = true
-	gContext.Clear(s.request)
 }
 
 func (s *session) AddFlash(value interface{}, vars ...string) {
