@@ -95,9 +95,10 @@ func Sessions(name string, store Store) negroni.HandlerFunc {
 		// Use before hook to save out the session
 		rw := res.(negroni.ResponseWriter)
 		rw.Before(func(negroni.ResponseWriter) {
-			if s.Written() {
-				check(s.Session().Save(r, res))
+			if s.session != nil && s.Written() {
+				check(s.session.Save(r, res))
 			}
+			gContext.Clear(s.request)
 		})
 
 		// Wrap our request with the new context
@@ -156,7 +157,6 @@ func (s *session) Clear() {
 	}
 	sess.Values = nil
 	s.written = true
-	gContext.Clear(s.request)
 }
 
 func (s *session) AddFlash(value interface{}, vars ...string) {
@@ -194,7 +194,7 @@ func (s *session) Options(options Options) {
 func (s *session) Session() *sessions.Session {
 	if s.session == nil {
 		var err error
-		s.session, err = s.store.Get(s.request, s.name)
+		s.session, err = sessions.GetRegistry(s.request).Get(s.store, s.name)
 		check(err)
 	}
 
